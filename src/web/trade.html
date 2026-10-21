@@ -1,0 +1,590 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Token Radar — Trade Advisor</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+  :root {
+    --bg: #0a0a0e;
+    --panel: #16161f;
+    --panel2: #1c1c27;
+    --border: #2a2a3a;
+    --text: #e0e0e0;
+    --text2: #a0a0b0;
+    --acc: #00ff88;
+    --ok: #4a9eff;
+    --warn: #ffaa00;
+    --bad: #ff4466;
+    --good: #00ff88;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Inter', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 16px;
+    overflow-x: hidden;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #050508; --panel: #111118; --panel2: #16161f; }
+  }
+  h1 { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
+  h2 { font-size: 16px; font-weight: 600; margin: 16px 0 8px; color: var(--text2); }
+  .subtitle { color: var(--text2); font-size: 13px; margin-bottom: 16px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px;
+  }
+  .card h3 { font-size: 12px; text-transform: uppercase; color: var(--text2); margin-bottom: 8px; }
+  .stat { font-size: 28px; font-weight: 700; }
+  .stat.good { color: var(--good); }
+  .stat.warn { color: var(--warn); }
+  .stat.bad { color: var(--bad); }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+  .badge.fast { background: rgba(0,255,136,0.2); color: var(--good); }
+  .badge.normal { background: rgba(74,158,255,0.2); color: var(--ok); }
+  .badge.dead { background: rgba(255,68,102,0.2); color: var(--bad); }
+  .controls { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+  button {
+    background: var(--panel2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 6px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: all 0.2s;
+  }
+  button:hover { background: var(--ok); color: var(--bg); }
+  button.active { border-color: var(--ok); color: var(--good); }
+  select {
+    background: var(--panel2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .table-wrap {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow-x: auto;
+    margin-bottom: 16px;
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); }
+  th { color: var(--text2); font-weight: 600; font-size: 11px; text-transform: uppercase; }
+  tr:hover { background: var(--panel2); }
+  .addr { font-family: monospace; font-size: 12px; color: var(--text2); }
+  .score-bar {
+    width: 100%;
+    height: 6px;
+    background: var(--border);
+    border-radius: 3px;
+    overflow: hidden;
+    margin-top: 2px;
+  }
+  .score-bar-fill { height: 100%; border-radius: 3px; }
+  .footer-note { text-align: center; color: var(--text2); font-size: 11px; margin-top: 20px; }
+</style>
+</head>
+<body>
+  <h1>🎯 Trade Advisor</h1>
+  <div class="subtitle">Self-learning runner predictor — miss ratio adjusts model thresholds automatically</div>
+
+  <div class="grid">
+    <div class="card">
+      <h3>Learning — Misses</h3>
+      <div class="stat bad" id="missed-count">0</div>
+      <div style="font-size:12px;color:var(--text2);margin-top:4px">Runners not recommended</div>
+    </div>
+    <div class="card">
+      <h3>Learning — Gains</h3>
+      <div class="stat good" id="gain-count">0</div>
+      <div style="font-size:12px;color:var(--text2);margin-top:4px">Runners correctly recommended</div>
+    </div>
+    <div class="card">
+      <h3>Miss Ratio</h3>
+      <div class="stat" id="miss-ratio">0.00</div>
+      <div style="font-size:12px;color:var(--text2);margin-top:4px">Target: 1.0 (misses/gains)</div>
+    </div>
+    <div class="card">
+      <h3>Adjustments</h3>
+      <div class="stat" id="adjustments">0</div>
+      <div style="font-size:12px;color:var(--text2);margin-top:4px">Auto-threshold changes</div>
+    </div>
+    <div class="card">
+      <h3>Min Score Threshold</h3>
+      <div class="stat warn" id="min-score">0.40</div>
+      <div style="font-size:12px;color:var(--text2);margin-top:4px">Auto-adjusted by miss ratio</div>
+    </div>
+    <div class="card">
+      <h3>Active Recommendations</h3>
+      <div class="stat ok" id="active-recs">0</div>
+      <div style="font-size:12px;color:var(--text2);margin-top:4px">Tokens to monitor</div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button id="refresh-btn" class="active">Refresh</button>
+    <button id="resolve-btn">Auto-Resolve Outcomes</button>
+    <button id="paper-check-btn">Run Paper Trade Check</button>
+    <select id="threshold-select">
+      <option value="0.25">1/4 ratio</option>
+      <option value="0.333" selected>1/3 ratio</option>
+      <option value="0.5">1/2 ratio</option>
+      <option value="0.1">1/10 ratio</option>
+    </select>
+    <button id="export-btn">Export Signals (copy)</button>
+    <button id="reset-btn" style="background:rgba(255,68,102,0.1);border-color:var(--bad)">Reset Learning</button>
+  </div>
+
+  <h2>📊 Paper Trade Learning Dashboard</h2>
+  <div class="grid" id="paper-learning">
+    <div class="card">
+      <h3>Paper Traded (2x+)</h3>
+      <div class="stat good" id="pt-paper-traded">0</div>
+      <div style="font-size:12px;color:var(--text2)">Gains captured</div>
+    </div>
+    <div class="card">
+      <h3>Missed Opportunities</h3>
+      <div class="stat bad" id="pt-missed">0</div>
+      <div style="font-size:12px;color:var(--text2)">Runners not recommended</div>
+    </div>
+    <div class="card">
+      <h3>Miss Ratio</h3>
+      <div class="stat warn" id="pt-miss-ratio">0.00</div>
+      <div style="font-size:12px;color:var(--text2)">Target: 1.0</div>
+    </div>
+    <div class="card">
+      <h3>Last Entry</h3>
+      <div class="stat ok" id="pt-last-entry">—</div>
+      <div style="font-size:12px;color:var(--text2)">Current move</div>
+    </div>
+    <div class="card">
+      <h3>Avg Exit Mult</h3>
+      <div class="stat" id="pt-avg-exit">—</div>
+      <div style="font-size:12px;color:var(--text2)">Paper profitability</div>
+    </div>
+  </div>
+
+  <div class="grid" id="paper-entry-log"></div>
+
+  <h2>📊 Paper Trading Summary</h2>
+  <div class="grid" id="paper-stats"></div>
+
+  <!-- NEW: 40-100 Only Live Monitor -->
+  <h2>🎯 Live Momentum Entry Monitor (40-100 Bucket Only)</h2>
+  <div class="controls" style="margin-bottom:8px">
+    <button id="momentum-refresh-btn" class="active">Refresh</button>
+    <label style="font-size:12px;color:var(--text2)">Min mult: <input type="number" id="momentum-mult-input" value="1.3" step="0.1" style="width:60px;background:var(--panel2);border:1px solid var(--border);color:var(--text);padding:2px 6px;border-radius:4px"></label>
+    <span class="badge fast" id="momentum-status">LIVE</span>
+  </div>
+  <div class="table-wrap">
+    <table id="momentum-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Symbol</th>
+          <th>Score</th>
+          <th>Bucket</th>
+          <th>Current Mult</th>
+          <th>Peak Mult</th>
+          <th>Status</th>
+          <th>Signals</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <h2>Trade Signals — Top 20 Candidates</h2>
+  <div class="table-wrap">
+    <table id="signals-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Symbol</th>
+          <th>Score</th>
+          <th>Bucket</th>
+          <th>Deadline</th>
+          <th>Fast Peak</th>
+          <th>Reason</th>
+          <th>Signals</th>
+          <th>Created</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <h2>Active Recommendations</h2>
+  <div class="table-wrap">
+    <table id="recs-table">
+      <thead>
+        <tr>
+          <th>Token</th>
+          <th>Score</th>
+          <th>Status</th>
+          <th>Since</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <div class="footer-note">Auto-refreshes every 30s. POST to /api/trade-advisor/record with outcome to train.</div>
+
+<script>
+const API = (path) => fetch(path).then(r => r.json());
+let TOKEN = localStorage.getItem('apiToken') || '';
+// Default token for local dev; prompts user if not set
+if (!TOKEN) {
+  TOKEN = prompt('Enter API token (or leave blank for default):') || 'atoken';
+  localStorage.setItem('apiToken', TOKEN);
+}
+
+async function loadDashboard() {
+  const [advisor, monitor] = await Promise.all([
+    API('/api/trade-advisor'),
+    API('/api/bucket-monitor/state').catch(() => null),
+  ]);
+
+  // Learning stats
+  const l = advisor.learning;
+  document.getElementById('missed-count').textContent = l.missCount || 0;
+  document.getElementById('gain-count').textContent = l.gainCount || 0;
+  document.getElementById('miss-ratio').textContent = l.missRatio?.toFixed(3) || '0.000';
+  document.getElementById('adjustments').textContent = l.adjustmentCount || 0;
+  document.getElementById('min-score').textContent = advisor.config.minScore.toFixed(2);
+  document.getElementById('active-recs').textContent = advisor.activeRecommendations?.length || 0;
+
+  // Signals table
+  const tbody = document.querySelector('#signals-table tbody');
+  tbody.innerHTML = '';
+  (advisor.tradeSignals || []).forEach((s, i) => {
+    const tr = document.createElement('tr');
+    const deadlineBadge = s.deadline === 'fast_peak'
+      ? '<span class="badge fast">FAST</span>'
+      : '<span class="badge normal">NORMAL</span>';
+    const scorePct = Math.round(s.score * 100);
+    const scoreColor = s.score >= 0.7 ? 'var(--good)' : s.score >= 0.4 ? 'var(--ok)' : 'var(--warn)';
+    tr.innerHTML = `
+      <td>${i + 1}</td>
+      <td><span class="addr">${s.symbol}</span></td>
+      <td>
+        <div style="color:${scoreColor};font-weight:600">${scorePct}</div>
+        <div class="score-bar"><div class="score-bar-fill" style="width:${scorePct}%;background:${scoreColor}"></div></div>
+      </td>
+      <td>${s.bucket || '?'}</td>
+      <td>${deadlineBadge}</td>
+      <td>${s.reason || ''}</td>
+      <td>${(advisor.activeRecommendations[i]?.signals || []).join(', ')}</td>
+      <td>${new Date(s.createdAt || advisor.activeRecommendations[i]?.createdAt || Date.now()).toLocaleString()}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  // Active recommendations
+  const recBody = document.querySelector('#recs-table tbody');
+  recBody.innerHTML = '';
+  (advisor.activeRecommendations || []).forEach(rec => {
+    const tr = document.createElement('tr');
+    const status = rec.outcome === 'pending'
+      ? '<span class="badge normal">MONITORING</span>'
+      : rec.outcome === 'runner'
+        ? '<span class="badge fast">RUNNER ✓</span>'
+        : '<span class="badge dead">MISSED</span>';
+    tr.innerHTML = `
+      <td><span class="addr">${rec.chainId}:${rec.tokenAddress.slice(0, 14)}...</span></td>
+      <td>${rec.combinedScore.toFixed(3)}</td>
+      <td>${status}</td>
+      <td>${rec.recommendedAt ? new Date(rec.recommendedAt).toLocaleString() : 'pending'}</td>
+    `;
+    recBody.appendChild(tr);
+  });
+}
+
+document.getElementById('refresh-btn').addEventListener('click', () => {
+  loadDashboard();
+});
+
+async function apiPost(path, body = null) {
+  const opts = { method: 'POST', headers: { 'x-api-token': TOKEN, 'Content-Type': 'application/json' } };
+  if (body) opts.body = JSON.stringify(body);
+  const r = await fetch(path, opts);
+  if (!r.ok) {
+    const txt = await r.text();
+    alert(`Error ${r.status}: ${txt}`);
+    throw new Error(`HTTP ${r.status}`);
+  }
+  return r.json();
+}
+
+document.getElementById('resolve-btn').addEventListener('click', async () => {
+  try {
+    await apiPost('/api/trade-advisor/resolve');
+    loadDashboard();
+  } catch (e) { console.error(e); }
+});
+
+document.getElementById('paper-check-btn').addEventListener('click', async () => {
+  try {
+    await apiPost('/api/trade-advisor/paper-check', { force: true });
+    loadDashboard();
+    loadPaperStats();
+  } catch (e) { console.error(e); }
+});
+
+document.getElementById('export-btn').addEventListener('click', async () => {
+  try {
+    const data = await API('/api/trade-advisor/signals');
+    if (!data.signals) { alert('No signals data received'); return; }
+    const text = JSON.stringify(data.signals, null, 2);
+    // Try clipboard first
+    let copied = false;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      try { await navigator.clipboard.writeText(text); copied = true; } catch(e) {}
+    }
+    if (copied) {
+      alert(`Copied ${data.signals.length} signals to clipboard`);
+    } else {
+      // Fallback: create downloadable link
+      const blob = new Blob([text], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `signals_${Date.now()}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      alert(`Downloaded ${data.signals.length} signals as JSON file (clipboard unavailable)`);
+    }
+  } catch (e) { console.error(e); alert('Export failed: ' + e.message); }
+});
+
+document.getElementById('reset-btn').addEventListener('click', async () => {
+  if (!confirm('Reset all learning data? This clears miss/gain counts and starts fresh.')) return;
+  try {
+    await apiPost('/api/trade-advisor/reset');
+    alert('Learning state reset!');
+    loadDashboard();
+    loadPaperStats();
+  } catch (e) { console.error(e); }
+});
+
+async function loadPaperStats() {
+  const data = await API('/api/trade-advisor/paper-summary');
+  const el = document.getElementById('paper-stats');
+  el.innerHTML = `
+    <div class="card"><h3>Paper 2x+ Crossings</h3><div class="stat good">${data.crossed2x || 0}</div><div style="font-size:12px;color:var(--text2)">Tokens that cleared 2x</div></div>
+    <div class="card"><h3>1.5x+ Crossings</h3><div class="stat ok">${data.crossed1p5x || 0}</div><div style="font-size:12px;color:var(--text2)">Tokens showing momentum</div></div>
+    <div class="card"><h3>Dead Zones Avoided</h3><div class="stat warn">${data.deadZoneAvoided || 0}</div><div style="font-size:12px;color:var(--text2)">Correctly filtered flat-line tokens</div></div>
+    <div class="card"><h3>Paper Traded</h3><div class="stat">${data.paperTraded || 0}</div><div style="font-size:12px;color:var(--text2)">Total paper-traded runners</div></div>
+    <div class="card"><h3>Paper Check</h3><div class="stat" style="font-size:16px">${data.lastPaperTradeCheck ? new Date(data.lastPaperTradeCheck).toLocaleTimeString() : 'never'}</div><div style="font-size:12px;color:var(--text2)">Last automatic check</div></div>
+    <div class="card"><h3>Total History</h3><div class="stat">${data.recommendationHistory || 0}</div><div style="font-size:12px;color:var(--text2)">Recommendations tracked</div></div>
+  `;
+
+  // Update paper learning dashboard
+  document.getElementById('pt-paper-traded').textContent = data.paperTraded || 0;
+  document.getElementById('pt-missed').textContent = data.missedCount || 0;
+  document.getElementById('pt-miss-ratio').textContent = (data.missRatio || 0).toFixed(2);
+  document.getElementById('pt-avg-exit').textContent = data.avgAchieved ? `${data.avgAchieved.toFixed(2)}x` : '—';
+}
+
+// ===== PAPER TRADE LEARNING DASHBOARD =====
+async function loadPaperLearning() {
+  const advisor = await API('/api/trade-advisor').catch(() => ({ activeRecommendations: [], learning: {} }));
+  const recs = advisor.activeRecommendations || [];
+
+  // Show last entry status
+  const pending = recs.filter(r => r.outcome === 'pending' || !r.outcome);
+  const lastEntryEl = document.getElementById('pt-last-entry');
+  if (pending.length > 0) {
+    const latest = pending[0];
+    lastEntryEl.textContent = `${pending.length} ACTIVE`;
+    lastEntryEl.style.color = 'var(--ok)';
+  } else {
+    lastEntryEl.textContent = 'NO ENTRIES';
+    lastEntryEl.style.color = 'var(--text2)';
+  }
+
+  // Build entry log (last 10 active recommendations)
+  const logEl = document.getElementById('paper-entry-log');
+  if (pending.length > 0) {
+    logEl.innerHTML = '<h3 style="margin-bottom:8px">📈 Active Paper Positions</h3>';
+    pending.slice(0, 10).forEach(rec => {
+      const score = (rec.combinedScore || rec.baseScore || 0).toFixed(3);
+      const signals = (rec.signals || []).join(', ');
+      const entryDate = rec.recommendedAt ? new Date(rec.recommendedAt).toLocaleTimeString() : '—';
+
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.style.padding = '10px';
+      card.style.borderLeft = '3px solid var(--ok)';
+      card.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <div style="font-size:12px;font-weight:600">${rec.chainId}:${rec.tokenAddress.slice(0, 10)}...</div>
+            <div style="font-size:11px;color:var(--text2)">Score: ${score} · Signals: ${signals || 'none'}</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:12px">${entryDate}</div>
+            <span class="badge normal">MONITORING</span>
+          </div>
+        </div>
+      `;
+      logEl.appendChild(card);
+    });
+  } else {
+    logEl.innerHTML = '<div class="card"><div style="padding:10px">No active paper positions. Enter a token to start tracking.</div></div>';
+  }
+
+  // Update learning stats
+  document.getElementById('pt-paper-traded').textContent = advisor.learning?.gainCount || 0;
+  document.getElementById('pt-missed').textContent = advisor.learning?.missCount || 0;
+  document.getElementById('pt-miss-ratio').textContent = (advisor.learning?.missRatio || 0).toFixed(2);
+}
+
+// ===== LIVE MOMENTUM MONITOR (40-100 ONLY) =====
+async function loadMomentumMonitor() {
+  const multThreshold = parseFloat(document.getElementById('momentum-mult-input').value) || 1.3;
+  const advisor = await API('/api/trade-advisor').catch(() => ({ activeRecommendations: [], learning: {} }));
+  const recs = advisor.activeRecommendations || [];
+
+  // Fetch dead zone stats
+  const dzStats = await API('/api/deadzone/stats').catch(() => ({ pct: 97 }));
+
+  // Filter: only 40-100 bucket tokens, pending outcome
+  // EXCLUDE dead zone risk tokens — only show tokens with actual price data
+  const candidates = recs.filter(r => {
+    const bucket = r.bucket || '';
+    const isHighBucket = bucket === '40-60' || bucket === '60-80' || bucket === '80-100';
+    const isPending = r.outcome === 'pending' || !r.outcome;
+    return isHighBucket && isPending;
+  }).filter(r => {
+    // Remove dead zone risk — only include tokens that have actual price data
+    // Will be verified after batch lookup below, but pre-filter by recommendation reason
+    return !r.reason || !r.reason.includes('DEAD_ZONE');
+  });
+
+  // Build single batch API call for all token data to avoid rate limiting
+  const batchKeys = candidates.slice(0, 30).map(r => `${r.chainId}:${r.tokenAddress}`).join(',');
+  let tokData = {};
+  try {
+    const batchResp = await fetch(`/api/tokens/batch?keys=${encodeURIComponent(batchKeys)}`).then(r => r.json());
+    if (batchResp.tokens) {
+      batchResp.tokens.forEach(t => {
+        tokData[`${t.chainId}:${t.tokenAddress}`] = t;
+      });
+    }
+  } catch(e) { /* fall back to individual calls */ }
+
+  const tbody = document.querySelector('#momentum-table tbody');
+  tbody.innerHTML = '';
+
+  let entryReady = 0;
+  let enrichedCount = 0;
+  let pendingFetch = 0;
+
+  // Process candidates - use batch data or fallback
+  for (let i = 0; i < candidates.length && i < 30; i++) {
+    const rec = candidates[i];
+    const key = `${rec.chainId}:${rec.tokenAddress}`;
+    let tok = tokData[key];
+
+    if (!tok) {
+      // Fallback: fetch individual sample data
+      pendingFetch++;
+      tok = await API(`/api/samples/${rec.chainId}/${rec.tokenAddress}?hours=24`).catch(() => null);
+      if (!tok) continue;
+      tok = tok.token || tok; // handle nested structure
+    }
+      // Skip dead zone tokens — no price data means dead zone risk, don't clutter table
+      const baseline = tok.baselineUsd || 0;
+      const currentPrice = tok.lastPriceUsd || (tok.highWaterUsd || baseline);
+      if (baseline === 0 || !currentPrice) continue;
+
+      enrichedCount++;
+
+    const currentMult = baseline > 0 ? (currentPrice / baseline) : 1;
+    const peakMult = tok.peakMultiple || currentMult;
+    const isRunner = tok.runner === true;
+    const readyToEnter = currentMult >= multThreshold && !isRunner;
+    if (readyToEnter) entryReady++;
+
+    // Determine price direction (recent movement)
+    const lastSample = tok.lastSampleAt ? new Date(tok.lastSampleAt) : null;
+    const direction = currentMult > 1.05 ? '↑' : currentMult < 0.95 ? '↓' : '→';
+    const directionColor = currentMult > 1.05 ? 'var(--good)' : currentMult < 0.95 ? 'var(--bad)' : 'var(--text2)';
+
+    let statusBadge, actionBtn;
+    if (isRunner) {
+      statusBadge = '<span class="badge fast">RUNNER ✓</span>';
+      actionBtn = '<span style="color:var(--warn)">—</span>';
+    } else if (readyToEnter) {
+      statusBadge = '<span class="badge fast">ENTRY SIGNAL 🚨</span>';
+      actionBtn = `<button style="padding:2px 8px;font-size:11px" onclick="enterPosition('${rec.chainId}','${rec.tokenAddress}')">ENTER</button>`;
+    } else if (currentMult >= 1.1) {
+      statusBadge = `<span class="badge normal">WATCH ${currentMult.toFixed(2)}x</span>`;
+      actionBtn = '<span style="color:var(--text2)">HOLD</span>';
+    } else {
+      statusBadge = '<span class="badge dead">WAIT</span>';
+      actionBtn = '<span style="color:var(--text2)">WAIT</span>';
+    }
+
+    const tr = document.createElement('tr');
+    tr.style.background = readyToEnter ? 'rgba(0,255,136,0.05)' : '';
+    tr.innerHTML = `
+      <td>${i + 1}</td>
+      <td><span class="addr">${rec.chainId}:${rec.tokenAddress.slice(0, 10)}...</span></td>
+      <td>${(rec.combinedScore || rec.baseScore || 0).toFixed(3)}</td>
+      <td>${rec.bucket || '?'}</td>
+      <td style="color:${directionColor};font-weight:600">${direction} ${currentMult.toFixed(2)}x</td>
+      <td>${peakMult.toFixed(2)}x</td>
+      <td>${statusBadge}</td>
+      <td>${(rec.signals || []).length}</td>
+      <td>${actionBtn}</td>
+    `;
+    tbody.appendChild(tr);
+  }
+
+  const statusEl = document.getElementById('momentum-status');
+  statusEl.textContent = `${entryReady} READY | ${enrichedCount} loaded`;
+  statusEl.style.color = entryReady > 0 ? 'var(--good)' : 'var(--text2)';
+}
+
+// Enter position helper
+async function enterPosition(chainId, tokenAddress) {
+  if (!confirm(`Enter position on ${chainId}:${tokenAddress.slice(0,8)}...?`)) return;
+  try {
+    // Add to active recommendations directly via generateTradeRecommendations
+    await apiPost('/api/trade-advisor/record', {
+      chainId, tokenAddress, outcome: 'monitoring', peakMultiple: null
+    });
+    alert('Position recorded — monitor via paper check');
+  } catch(e) { console.error(e); alert('Failed: ' + e.message); }
+}
+
+document.getElementById('momentum-refresh-btn').addEventListener('click', loadMomentumMonitor);
+document.getElementById('momentum-mult-input').addEventListener('change', loadMomentumMonitor);
+
+// Auto-refresh every 30s
+setInterval(loadDashboard, 30000);
+setInterval(loadPaperStats, 60000);
+setInterval(loadMomentumMonitor, 45000);
+setInterval(loadPaperLearning, 60000);
+loadDashboard();
+loadPaperStats();
+loadMomentumMonitor();
+loadPaperLearning();
+</script>
+</body>
+</html>
