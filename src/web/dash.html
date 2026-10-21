@@ -1,0 +1,488 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<title>Token Radar — Runner Dashboard</title>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<style>
+:root{--bg:#0b0e14;--panel:#121722;--line:#1f2735;--text:#dbe2ef;--muted:#8b96a9;--acc:#4da3ff;--ok:#3ecf8e;--warn:#ffb84d;--bad:#ff6b6b}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 system-ui,Segoe UI,Roboto,sans-serif}
+header{display:flex;gap:16px;align-items:center;padding:12px 18px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--bg);z-index:5;flex-wrap:wrap}
+header h1{font-size:16px;margin:0}
+.m{color:var(--muted);font-size:12px}.m b{color:var(--text)}
+main{padding:18px;max-width:1400px;margin:0 auto}
+table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-bottom:8px}
+th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;font-size:13px;vertical-align:top}
+th{color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.04em}
+tr:last-child td{border-bottom:none}
+button{background:#1c2637;color:var(--text);border:1px solid var(--line);border-radius:6px;padding:5px 10px;cursor:pointer;font-size:12px}
+button:hover{border-color:var(--acc)}button.primary{background:var(--acc);border-color:var(--acc);color:#04121f;font-weight:600}
+.badge{display:inline-block;background:#182238;border:1px solid var(--line);color:var(--acc);border-radius:20px;padding:1px 8px;font-size:11px;margin:1px 2px 1px 0}
+.st{font-size:11px;padding:2px 8px;border-radius:10px}
+details{margin-bottom:8px;background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+summary{cursor:pointer;color:var(--muted);padding:8px 12px;font-weight:600;font-size:13px;display:flex;align-items:center;gap:6px;list-style:none}
+summary::before{content:'▸';display:inline-block;transition:transform .15s}
+details[open]>summary::before{transform:rotate(90deg)}
+details[open]>summary{border-bottom:1px solid var(--line)}
+details>div,details>table{padding:12px;margin-bottom:0}
+details>table{border-radius:0;border:0}
+.row{display:flex;gap:8px;margin:6px 0;align-items:center}
+.row input[type=range]{flex:1}
+.chart-bar{display:inline-block;height:8px;border-radius:4px;margin:1px}
+.chart-bar.runner{background:var(--acc)}
+.chart-bar.non-runner{background:var(--warn)}
+.chart-bar.deadzone{background:#444}
+.scatter-container{position:relative;width:100%;height:400px;background:#0f1521;border:1px solid var(--line);border-radius:8px;cursor:crosshair}
+.scatter-container svg{width:100%;height:100%}
+.scatter-point{transition:opacity .15s}
+.scatter-point:hover{stroke:#fff;stroke-width:2}
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:12px}
+.stat-card{background:#121722;border:1px solid var(--line);border-radius:8px;padding:12px;text-align:center}
+.stat-card .v{font-size:24px;font-weight:600}
+.stat-card .l{font-size:11px;color:var(--muted);text-transform:uppercase}
+.tooltip{position:absolute;background:#121722;border:1px solid var(--line);border-radius:4px;padding:6px 10px;font-size:11px;pointer-events:none;opacity:0;transition:opacity .15s;max-width:240px;z-index:10}
+.tooltip.show{opacity:1}
+.legend{display:flex;gap:16px;flex-wrap:wrap;margin:8px 0;font-size:12px}
+.legend-item{display:flex;align-items:center;gap:4px}
+.legend-swatch{width:14px;height:14px;border-radius:3px;display:inline-block}
+</style>
+</head>
+<body>
+<header>
+  <h1>📊 Token Radar — Runner Dashboard</h1>
+  <span class="m">runners <b id="m-runners">–</b></span>
+  <span class="m">dead zone <b id="m-deadzone">–</b></span>
+  <span class="m">base rate <b id="m-base">–</b></span>
+  <span class="m">active bucket <b id="m-bucket">–</b></span>
+  <span class="m" style="margin-left:auto">
+    <button onclick="window.location.href='/'">← Main Dashboard</button>
+    🔑 <input id="api-token" placeholder="API token" style="background:#0f1521;border:1px solid var(--line);color:var(--text);border-radius:6px;padding:3px 6px;width:150px"/>
+  </span>
+</header>
+<main>
+  <!-- Summary stats -->
+  <div class="stats-grid" id="stats-grid"></div>
+
+  <!-- Dead Zone Analysis -->
+  <details open>
+    <summary>👻 Dead Zone Detection (peak stays at 1x)</summary>
+    <div class="row" id="deadzone-row"></div>
+    <div style="display:flex;gap:24px;flex-wrap:wrap">
+      <div><h3 style="color:var(--muted);font-size:12px">Dead zone by age</h3>
+        <div id="deadzone-age-chart"></div></div>
+      <div><h3 style="color:var(--muted);font-size:12px">Dead zone by chain</h3>
+        <div id="deadzone-chain-chart"></div></div>
+    </div>
+  </details>
+
+  <!-- Runner Scatter Plot -->
+  <details open>
+    <summary>🏃 Runner Scatter Plot (excluding dead zone)</summary>
+    <div class="row">
+      <span class="m">Y-axis: Peak Multiple (log)</span>
+      <span class="m" style="margin-left:auto">
+        X-axis: Time to Peak (minutes, log)
+      </span>
+    </div>
+    <div class="legend">
+      <div class="legend-item"><span class="legend-swatch" style="background:var(--ok)"></span> Runners (≥2x)</div>
+      <div class="legend-item"><span class="legend-swatch" style="background:var(--acc)"></span> Score 60-100%</div>
+      <div class="legend-item"><span class="legend-swatch" style="background:var(--warn)"></span> Score 40-60%</div>
+      <div class="legend-item"><span class="legend-swatch" style="background:var(--muted)"></span> Score &lt;40%</div>
+      <div class="legend-item"><span class="legend-swatch" style="background:#444"></span> Dead zone (hidden)</div>
+    </div>
+    <div class="scatter-container" id="scatter"></div>
+    <div class="row" style="margin-top:8px">
+      <span class="m">Min peak filter: <input id="peak-filter" type="range" min="1" max="100" value="2" oninput="updateScatter()"> <span id="peak-filter-val">2x</span></span>
+      <span class="m" style="margin-left:16px">Show dead zone: <input id="show-deadzone" type="checkbox" onchange="updateScatter()" checked></span>
+      <span class="m" style="margin-left:16px">Time cluster: <select id="time-cluster" onchange="filterByTimeCluster()">
+        <option value="all">All hours</option>
+      </select></span>
+    </div>
+  </details>
+
+  <!-- Bucket Performance Model -->
+  <details open>
+    <summary>🪣 Bucket Performance Model (≥1/3 runner rate)</summary>
+    <div class="row">
+      <span class="m" id="bucket-status"></span>
+      <button class="primary" id="btn-bucket-refresh" onclick="refreshBucketPerf()" style="display:none">🔄 Refresh model</button>
+    </div>
+    <table>
+      <thead><tr><th>Bucket</th><th>Tokens</th><th>Runners</th><th>Actual Rate</th><th>Expected</th><th>Meets ≥1/3?</th></tr></thead>
+      <tbody id="bucket-table"></tbody>
+    </table>
+  </details>
+
+  <!-- Monitored Bucket Tracker -->
+  <details>
+    <summary>👁️ Monitored Bucket (auto-refresh)</summary>
+    <div class="row">
+      <button class="primary" onclick="refreshMonitored()">↻ Refresh</button>
+      <span class="m" id="monitored-info"></span>
+    </div>
+    <table>
+      <thead><tr><th>Score</th><th>Adjusted</th><th>Bucket</th><th>CA</th><th>Chain</th><th>Peak</th><th>Status</th><th>Deadzone</th><th>Signals</th><th>First Seen</th></tr></thead>
+      <tbody id="monitored-table"></tbody>
+    </table>
+  </details>
+
+  <!-- Time Cluster Analysis -->
+  <details>
+    <summary>⏰ Time Cluster Analysis</summary>
+    <div id="time-cluster-chart"></div>
+    <div class="row" style="margin-top:8px"><span class="m" id="cluster-summary"></span></div>
+  </details>
+</main>
+
+<div class="tooltip" id="scatter-tooltip"></div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+let apiToken = localStorage.getItem('dashApiToken') || '';
+$('#api-token').value = apiToken;
+$('#api-token').oninput = (e) => { apiToken = e.target.value; localStorage.setItem('dashApiToken', apiToken); };
+
+let scatterData = { runners: [], deadZone: [], deadzoneStats: null };
+let bucketData = null;
+
+async function api(path, opts = {}) {
+  const res = await fetch(path, { ...opts, headers: { 'content-type': 'application/json', 'x-api-token': apiToken, ...(opts.headers || {}) } });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || res.status);
+  return data;
+}
+
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const short = (a) => (a && a.length > 12 ? a.slice(0, 6) + '…' + a.slice(-4) : a || '');
+
+function fmtTime(d) {
+  const t = new Date(d);
+  const m = Math.round((Date.now() - t) / 60000);
+  if (m < 60) return `${m}m ago`;
+  if (m < 1440) return `${Math.round(m/60)}h ago`;
+  return `${Math.round(m/1440)}d ago`;
+}
+
+async function refreshAll() {
+  try { await refreshHealth(); } catch {}
+  try { await refreshScatter(); } catch (e) { $('#scatter').innerHTML = `<div class="m">Loading...</div>`; }
+  try { await refreshDeadZone(); } catch (e) { $('#deadzone-row').textContent = e.message; }
+  try { await refreshBucketPerf(); } catch (e) { $('#bucket-status').textContent = e.message; }
+  try { await refreshMonitored(); } catch {}
+  try { await refreshTimeClusters(); } catch {}
+}
+
+// --- Header stats ---
+async function refreshHealth() {
+  const s = await api('/api/deadzone/stats');
+  const h = await api('/health');
+  $('#m-runners').textContent = h.metrics?.matched || '–';
+  $('#m-deadzone').textContent = s.deadZone;
+  $('#m-base').textContent = h.metrics ? '—' : '—';
+  const bp = await api('/api/bucket-performance');
+  $('#m-bucket').textContent = bp.activeBucket || `${bp.bestBucket?.bucket || '—'}`;
+  $('#m-base').textContent = `${Math.round(bp.baseRate * 100)}%`;
+}
+
+// --- Scatter plot ---
+async function refreshScatter() {
+  const d = await api('/api/runners/scatter?limit=500');
+  scatterData = d;
+
+  renderScatter({
+    runners: d.runners,
+    deadZone: d.deadZone,
+    deadzoneStats: d.deadzoneStats,
+  });
+}
+
+function renderScatter(data) {
+  const showDead = $('#show-deadzone').checked;
+  const peakFilter = Number($('#peak-filter').value);
+  $('#peak-filter-val').textContent = `${peakFilter}x`;
+
+  const runners = data.runners.filter((r) => (r.peakMultiple ?? 0) >= peakFilter);
+  const deadZone = showDead ? data.deadZone.filter((d) => (d.peakMultiple ?? 1) < peakFilter * 0.5) : [];
+
+  // build time cluster options
+  const clusterSelect = $('#time-cluster');
+  clusterSelect.innerHTML = '<option value="all">All hours</option>';
+  const hourCounts = {};
+  for (const r of data.runners) {
+    if (r.createdAt) {
+      const h = new Date(r.createdAt).getUTCHours();
+      hourCounts[h] = (hourCounts[h] || 0) + 1;
+    }
+  }
+  Object.keys(hourCounts).sort((a, b) => hourCounts[b] - hourCounts[a]).slice(0, 8).forEach((h) => {
+    const opt = document.createElement('option');
+    opt.value = h;
+    opt.textContent = `${h.padStart(2, '0')}:00 UTC (${hourCounts[h]} runners)`;
+    clusterSelect.appendChild(opt);
+  });
+
+  // scatter canvas
+  const NS = 'http://www.w3.org/2000/svg';
+  const container = document.getElementById('scatter');
+  container.innerHTML = '';
+
+  const svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('viewBox', '0 0 800 400');
+  svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+
+  // margins
+  const m = { top: 30, right: 20, bottom: 50, left: 60 };
+  const w = 800 - m.left - m.right;
+  const h = 400 - m.top - m.bottom;
+
+  const g = document.createElementNS(NS, 'g');
+  g.setAttribute('transform', `translate(${m.left},${m.top})`);
+  svg.appendChild(g);
+
+  // compute log scales
+  const allPeaks = [...runners.map((r) => r.peakMultiple || 1), ...deadZone.map((d) => d.peakMultiple || 1)];
+  const allTtp = [...runners.map((r) => r.timeToPeakMin || 1), ...deadZone.map(() => 1)].filter((x) => x > 0);
+
+  const xMin = 1, xMax = Math.max(1000, Math.max(...allTtp));
+  const yMin = 1, yMax = Math.max(20, Math.max(...allPeaks));
+
+  const logScale = (v, vmin, vmax) => vmin === vmax ? 0 : Math.log(v / vmin) / Math.log(vmax / vmin);
+  const x = (ttp) => w * logScale(ttp || 1, xMin, xMax);
+  const y = (peak) => h * (1 - logScale(peak || 1, yMin, yMax));
+
+  // axes
+  const xAxis = document.createElementNS(NS, 'line');
+  xAxis.setAttribute('x1', 0); xAxis.setAttribute('y1', h);
+  xAxis.setAttribute('x2', w); xAxis.setAttribute('y2', h);
+  xAxis.setAttribute('stroke', 'var(--line)');
+  xAxis.setAttribute('stroke-width', 1);
+  g.appendChild(xAxis);
+
+  const yAxis = document.createElementNS(NS, 'line');
+  yAxis.setAttribute('x1', 0); yAxis.setAttribute('y1', 0);
+  yAxis.setAttribute('x2', 0); yAxis.setAttribute('y2', h);
+  yAxis.setAttribute('stroke', 'var(--line)');
+  yAxis.setAttribute('stroke-width', 1);
+  g.appendChild(yAxis);
+
+  // y-axis labels (log scale)
+  const yTicks = [1, 2, 5, 10, 20, 50, 100];
+  for (const tick of yTicks) {
+    if (tick > yMax) continue;
+    const yy = y(tick);
+    const line = document.createElementNS(NS, 'line');
+    line.setAttribute('x1', -5); line.setAttribute('y1', yy);
+    line.setAttribute('x2', w); line.setAttribute('y2', yy);
+    line.setAttribute('stroke', 'var(--line)');
+    line.setAttribute('stroke-width', 0.5);
+    line.setAttribute('stroke-dasharray', '3,3');
+    g.appendChild(line);
+
+    const label = document.createElementNS(NS, 'text');
+    label.setAttribute('x', -10);
+    label.setAttribute('y', yy + 4);
+    label.setAttribute('text-anchor', 'end');
+    label.setAttribute('fill', 'var(--muted)');
+    label.setAttribute('font-size', '10');
+    label.textContent = `${tick}x`;
+    g.appendChild(label);
+  }
+
+  // x-axis labels
+  const xTicks = [1, 5, 10, 30, 60, 120, 300, 600, 1000];
+  for (const tick of xTicks) {
+    if (tick > xMax) continue;
+    const xx = x(tick);
+    const line = document.createElementNS(NS, 'line');
+    line.setAttribute('x1', xx); line.setAttribute('y1', h);
+    line.setAttribute('x2', xx); line.setAttribute('y2', h + 5);
+    line.setAttribute('stroke', 'var(--line)');
+    line.setAttribute('stroke-width', 1);
+    g.appendChild(line);
+
+    const label = document.createElementNS(NS, 'text');
+    label.setAttribute('x', xx);
+    label.setAttribute('y', h + 18);
+    label.setAttribute('text-anchor', 'middle');
+    label.setAttribute('fill', 'var(--muted)');
+    label.setAttribute('font-size', '10');
+    label.textContent = tick < 60 ? `${tick}m` : tick < 120 ? `${Math.round(tick/60)}h` : `${Math.round(tick/60)}h`;
+    g.appendChild(label);
+  }
+
+  // axis titles
+  const yTitle = document.createElementNS(NS, 'text');
+  yTitle.setAttribute('x', -35); yTitle.setAttribute('y', -15);
+  yTitle.setAttribute('fill', 'var(--muted)'); yTitle.setAttribute('font-size', '11');
+  yTitle.setAttribute('transform', 'rotate(-90)');
+  yTitle.textContent = 'Peak Multiple (log)';
+  g.appendChild(yTitle);
+
+  const xTitle = document.createElementNS(NS, 'text');
+  xTitle.setAttribute('x', w / 2); xTitle.setAttribute('y', h + 40);
+  xTitle.setAttribute('text-anchor', 'middle');
+  xTitle.setAttribute('fill', 'var(--muted)'); xTitle.setAttribute('font-size', '11');
+  xTitle.textContent = 'Time to Peak (minutes, log)';
+  g.appendChild(xTitle);
+
+  // render dead zone points (gray, small)
+  for (const d of deadZone) {
+    const p = document.createElementNS(NS, 'circle');
+    p.setAttribute('cx', x(1));
+    p.setAttribute('cy', y(d.peakMultiple || 1));
+    p.setAttribute('r', 3);
+    p.setAttribute('fill', '#444');
+    p.setAttribute('fill-opacity', 0.4);
+    p.setAttribute('class', 'scatter-point');
+    p.addEventListener('mouseenter', () => showTooltip(p, d));
+    p.addEventListener('mouseleave', () => hideTooltip());
+    g.appendChild(p);
+  }
+
+  // color scale for score buckets
+  const bucketColor = { '80-100': 'var(--ok)', '60-80': 'var(--acc)', '40-60': 'var(--warn)', '20-40': '#666', '0-20': '#444' };
+
+  // render runner points
+  for (const r of runners) {
+    const color = bucketColor[r.scoreBucket] || 'var(--acc)';
+    const p = document.createElementNS(NS, 'circle');
+    p.setAttribute('cx', x(r.timeToPeakMin || 1));
+    p.setAttribute('cy', y(r.peakMultiple || 1));
+    p.setAttribute('r', 5);
+    p.setAttribute('fill', color);
+    p.setAttribute('fill-opacity', r.scoreBucket === '80-100' ? 0.9 : r.scoreBucket === '60-80' ? 0.7 : r.scoreBucket === '40-60' ? 0.5 : 0.3);
+    p.setAttribute('class', 'scatter-point');
+    p.addEventListener('mouseenter', () => showTooltip(p, r));
+    p.addEventListener('mouseleave', () => hideTooltip());
+    g.appendChild(p);
+  }
+
+  container.appendChild(svg);
+}
+
+function showTooltip(point, d) {
+  const tt = $('#scatter-tooltip');
+  const rect = point.getBoundingClientRect();
+  const isRunner = d.runner !== false;
+  tt.innerHTML = `<b>${short(d.tokenAddress)}</b> (${d.chainId})<br>` +
+    `<span class="m">${esc(d.websiteUrl || '—')}</span><br>` +
+    `${isRunner ? `🏃 peak: ${d.peakMultiple?.toFixed(2) || '?'}x · ttp: ${d.timeToPeakMin || '?'}m` : `👻 dead zone: peak stays at ${d.peakMultiple || 1}x`}<br>` +
+    (d.signals ? `signals: ${(d.signals || []).join(', ')}` : '') +
+    (d.score != null ? `<br>score: ${Math.round(d.score * 100)}% (${d.scoreBucket})` : '');
+  tt.style.left = `${rect.left + 10}px`;
+  tt.style.top = `${rect.top - 20}px`;
+  tt.classList.add('show');
+}
+
+function hideTooltip() {
+  $('#scatter-tooltip').classList.remove('show');
+}
+
+// --- Dead zone analysis ---
+async function refreshDeadZone() {
+  const d = await api('/api/deadzone/stats');
+  $('#deadzone-row').innerHTML = `<span class="m">Total: ${d.total} · Dead zone: ${d.deadZone} (${d.pct}%) · `;
+  $('#deadzone-row').innerHTML += `fresh: ${d.byAge.fresh} · warming: ${d.byAge.warming} · confirmed: ${d.byAge.confirmed}</span>`;
+
+  // age chart
+  const byAge = d.byAge;
+  $('#deadzone-age-chart').innerHTML = ['fresh', 'warming', 'confirmed'].map((k, i) =>
+    `<div style="margin:4px 0"><span class="m">${k}</span> ${'★'.repeat(byAge[k] || 0)}</div>`
+  ).join('');
+
+  // chain chart
+  const chains = d.byChain;
+  const sortedChains = Object.entries(chains).sort(([,a],[,b]) => b.deadZone - a.deadZone);
+  $('#deadzone-chain-chart').innerHTML = sortedChains.map(([c, v]) =>
+    `<div style="margin:2px 0"><span class="m">${c}</span> ${v.total} total, ${v.deadZone} dead (${Math.round(v.deadZone / v.total * 100)}%)</div>`
+  ).join('');
+}
+
+// --- Bucket performance ---
+async function refreshBucketPerf() {
+  const d = await api('/api/bucket-performance?minSamples=5');
+  bucketData = d;
+  $('#bucket-status').textContent = d.activeBucket
+    ? `active: ${d.bestBucket?.bucket} (${d.bestBucket?.runnerRatePct || 0}% runner rate)`
+    : `best: ${d.bestBucket?.bucket || '—'} (${d.bestBucket?.runnerRatePct || 0}%)`;
+
+  if (d.bestBucket?.meetsThreshold) {
+    $('#btn-bucket-refresh').style.display = 'inline-block';
+  }
+
+  $('#bucket-table').innerHTML = d.buckets.map((b) => `
+    <tr>
+      <td><b>${b.bucket}%</b></td>
+      <td>${b.n}</td>
+      <td>${b.runners}</td>
+      <td><b>${b.runnerRatePct}%</b></td>
+      <td class="m">base ${Math.round(d.baseRate * 100)}%</td>
+      <td style="color:${b.meetsThreshold ? 'var(--ok)' : b.runnerRate > d.baseRate * 1.2 ? 'var(--acc)' : 'var(--muted)'}">
+        ${b.meetsThreshold ? '✅ YES' : b.runnerRate > d.baseRate * 1.2 ? '🔼 better' : '—'}
+      </td>
+    </tr>`).join('') || '<tr><td colspan="5" class="m">no data yet</td></tr>';
+}
+
+// --- Monitored bucket ---
+async function refreshMonitored() {
+  if (!bucketData?.activeBucket) return;
+  const d = await api(`/api/bucket-candidates/${bucketData.activeBucket}?limit=50`);
+  $('#monitored-info').textContent = `${d.runnerRate ? Math.round(d.runnerRate * 100) + '%' : '—'} runner rate · ${d.total} tokens in bucket`;
+
+  $('#monitored-table').innerHTML = d.items.map((r) => `
+    <tr>
+      <td>${r.score != null ? Math.round(r.score * 100) + '%' : '—'}</td>
+      <td>${r.adjustedScore != null ? Math.round(r.adjustedScore * 100) + '%' : '—'}</td>
+      <td>${r.scoreBucket || '—'}</td>
+      <td><code>${short(r.tokenAddress)}</code></td>
+      <td>${r.chainId}</td>
+      <td>${r.peakMultiple ? r.peakMultiple.toFixed(1) + 'x' : '—'}</td>
+      <td>${r.runner ? '🏃' : r.lastSampleAt ? fmtTime(r.lastSampleAt) : '—'}</td>
+      <td>${r.inDeadZone ? `👻 ${r.deadzoneConfidence.toFixed(1)}` : '—'}</td>
+      <td>${(r.signals || []).map((s) => `<span class="badge">${s}</span>`).join('')}</td>
+      <td class="m">${r.createdAt ? new Date(r.createdAt).toLocaleString() : '—'}</td>
+    </tr>`).join('') || '<tr><td colspan="10" class="m">no candidates in this bucket yet</td></tr>';
+}
+
+// --- Time cluster analysis ---
+async function refreshTimeClusters() {
+  // use deadzone stats for time distribution
+  const d = await api('/api/analytics/summary');
+  const hours = d.seenByHourUTC || [];
+  const maxSeen = Math.max(...hours.map((h) => h.seen), 1);
+
+  $('#time-cluster-chart').innerHTML = hours.map((h, i) => {
+    const w = h.seen ? Math.round(h.seen / maxSeen * 100) : 0;
+    const runners = h.runners || 0;
+    return `<div style="margin:2px 0"><span class="m">${String(i).padStart(2, '0')}:00</span> ` +
+      `<span class="chart-bar runner" style="width:${w}px"></span> ${h.seen} seen ${runners ? `· ${runners} 🏃` : ''}</div>`;
+  }).join('');
+
+  $('#cluster-summary').textContent = `${d.runners} runners in last ${d.windowHours}h · base rate ${Math.round(d.runnerRatePct)}%`;
+}
+
+// --- Event handlers ---
+function updateScatter() {
+  if (scatterData) renderScatter(scatterData);
+}
+
+function filterByTimeCluster() {
+  const sel = $('#time-cluster').value;
+  $('#cluster-summary').textContent = sel === 'all' ? 'All hours' : `Filtered to hour ${sel}:00 UTC`;
+  // in a full implementation, this would re-query with time filter
+  if (scatterData) renderScatter(scatterData);
+}
+
+// init
+let apiTokenVal = '';
+const tickAll = () => {
+  const tok = $('#api-token').value;
+  if (tok !== apiTokenVal) { apiTokenVal = tok; localStorage.setItem('dashApiToken', tok); }
+  refreshAll();
+};
+tickAll();
+setInterval(tickAll, 10000);
+</script>
+</body>
+</html>
