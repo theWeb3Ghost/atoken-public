@@ -157,4 +157,4 @@ MIT — Use freely, but remember: crypto is risky. DYOR.
 
 ---
 
-*This is the public version. DM FOR CALLOUTS FROM FETCHED DATA*
+*This is the public version. The private repo includes production `.env` with API keys, live server deployment configs, and historical trade data.*
