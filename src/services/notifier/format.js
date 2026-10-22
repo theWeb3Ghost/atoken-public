@@ -73,6 +73,18 @@ export function runnerMessage(c) {
   ].join('\n');
 }
 
+export function runnerKeyboard(c) {
+  const dexUrl = c.dexUrl || `https://dexscreener.com/${c.chainId}/${c.tokenAddress}`;
+  return [
+    [{ text: `🔍 ${shortCa(c.tokenAddress)} ANALYZE`, callback_data: `analyze:${c.chainId}:${c.tokenAddress}` }],
+    [
+      { text: '🌐 Website', url: c.websiteUrl || `https://dexscreener.com/${c.chainId}/${c.tokenAddress}` },
+      { text: '📈 DexScreener', url: dexUrl },
+    ],
+    [{ text: '❌ Ignore', callback_data: `ignore:${c.chainId}:${c.tokenAddress}` }],
+  ];
+}
+
 /**
  * Momentum Entry Monitor alert — fired when a token in the 40-100 bucket
  * crosses the momentum threshold (default 1.3x current multiple).
@@ -92,4 +104,16 @@ export function momentumEntryMessage(r, multThreshold) {
     '', `<b>Bucket:</b> ${esc(r.scoreBucket || r.bucket || '?')} · <b>Score:</b> ${(r.score || 0).toFixed(3)}`, '',
     `📊 <b>Action:</b> Token in 40-100 bucket crossed ${multThreshold.toFixed(1)}x multiple threshold`,
   ].join('\n');
+}
+
+export function momentumEntryKeyboard(r) {
+  const dexUrl = `https://dexscreener.com/${r.chainId}/${r.tokenAddress}`;
+  return [
+    [{ text: `🔍 ${shortCa(r.tokenAddress)} ANALYZE`, callback_data: `analyze:${r.chainId}:${r.tokenAddress}` }],
+    [
+      { text: '🌐 Website', url: r.websiteUrl || dexUrl },
+      { text: '📈 DexScreener', url: dexUrl },
+    ],
+    [{ text: '❌ Ignore', callback_data: `ignore:${r.chainId}:${r.tokenAddress}` }],
+  ];
 }
