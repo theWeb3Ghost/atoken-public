@@ -963,7 +963,7 @@ export async function checkMomentumEntrySignals(multThreshold = 1.3, limit = 30)
   const candMap = new Map(cands.map((c) => [`${c.chainId}:${c.tokenAddress}`, c]));
 
   const { enqueueNotification } = await import('./notifier/index.js');
-  const { momentumEntryMessage } = await import('./notifier/format.js');
+  const { momentumEntryMessage, momentumEntryKeyboard } = await import('./notifier/format.js');
 
   for (const record of candidates) {
     const tokenId = record.tokenId;
@@ -1001,6 +1001,7 @@ export async function checkMomentumEntrySignals(multThreshold = 1.3, limit = 30)
         chainId: signal.chainId,
         tokenAddress: signal.tokenAddress,
         text: momentumEntryMessage(signal, multThreshold),
+        keyboard: momentumEntryKeyboard(signal),
       });
 
       // Copy to monitoring bucket for ongoing tracking
