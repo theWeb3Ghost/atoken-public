@@ -7,7 +7,7 @@ import { processBatch, scheduleCycle } from '../services/sampler.js';
 import { backfillLabels } from '../services/backfill.js';
 import { openPaperTrades, gradePaperTrades } from '../services/paper.js';
 import { enqueueNotification } from '../services/notifier/index.js';
-import { runnerMessage } from '../services/notifier/format.js';
+import { runnerMessage, runnerKeyboard } from '../services/notifier/format.js';
 
 export function startSampleWorker() {
   const worker = new Worker('sample', async (job) => {
@@ -20,7 +20,7 @@ export function startSampleWorker() {
         dedupeKey: `runner__${f.chainId}__${f.tokenAddress}`,
         kind: 'runner', chainId: f.chainId, tokenAddress: f.tokenAddress,
         text: runnerMessage({ ...cand, peakMultiple: f.multiple }),
-        keyboard: [[{ text: '📈 DexScreener', url: `https://dexscreener.com/${f.chainId}/${f.tokenAddress}` }]],
+        keyboard: runnerKeyboard({ ...cand, peakMultiple: f.multiple }),
       });
     }
     return r;
